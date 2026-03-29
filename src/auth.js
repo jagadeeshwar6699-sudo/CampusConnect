@@ -21,19 +21,3 @@ function signToken(payload) {
 }
 
 module.exports = { authMiddleware, signToken };
-```
-
----
-
-**`.env`** (never pushed to GitHub)
-```
-JWT_SECRET=rvrjcce-campus-secret-2025
-PORT=3000
-```
-
----
-
-**`.env.example`** (safe to push)
-```
-JWT_SECRET=your_secret_here
-PORT=3000
