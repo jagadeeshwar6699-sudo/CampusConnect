@@ -842,10 +842,19 @@ async function loadStats(){
 /* ════ EVENT CARD ════ */
 function evCardHtml(e){
   const hasLink=e.reg_link&&e.reg_link.trim()!=='';
-  const regBtn=hasLink
-    ?'<a href="'+e.reg_link+'" target="_blank" rel="noopener noreferrer" class="reg-btn">📋 Register Now</a>'
-    :'<button class="reg-btn '+(e.registered?'done':'')+'" id="erb-'+e.id+'" onclick="regEv(\''+e.id+'\',this)">'+(e.registered?'✔ Registered':'Register')+'</button>';
-  return '<div class="ev-card"><div class="ev-thumb" style="background:'+e.bg+'">'+e.emoji+'<div class="ev-cat-badge c-'+e.cat+'">'+e.cat+'</div></div><div class="ev-body"><div class="ev-title">'+e.title+'</div><div class="ev-date">📅 '+e.date+'</div><div class="ev-venue">📍 '+e.venue+'</div>'+(hasLink?'<div style="font-size:.68rem;color:var(--green);margin-bottom:.5rem">🔗 External registration form</div>':'')+'<div class="ev-foot"><div class="ev-cnt">👥 <span id="ec-'+e.id+'">'+e.count+'</span> registered</div>'+regBtn+'</div></div></div>';
+  const deadlinePassed=e.deadline&&new Date()>new Date(e.deadline);
+  const deadlineInfo=e.deadline?'<div style="font-size:.68rem;color:'+(deadlinePassed?'var(--red)':'var(--muted)')+';margin-bottom:.5rem">⏰ '+(deadlinePassed?'Registration closed':'Deadline: '+new Date(e.deadline).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}))+'</div>':'';
+  let regBtn;
+  if(deadlinePassed){
+    regBtn='<button class="reg-btn" style="background:#94a3b8;cursor:not-allowed" onclick="showClosedPopup()">🔒 Closed</button>';
+  } else if(hasLink){
+    regBtn='<a href="'+e.reg_link+'" target="_blank" rel="noopener noreferrer" class="reg-btn">📋 Register Now</a>';
+  } else {
+    regBtn='<button class="reg-btn '+(e.registered?'done':'')+'" id="erb-'+e.id+'" onclick="regEv(\''+e.id+'\',this)">'+(e.registered?'✔ Registered':'Register')+'</button>';
+  }
+  const organiserBtns=currentUser?.isOrganiser
+    ?'<div style="display:flex;gap:.35rem;margin-top:.5rem"><button class="reg-btn" style="background:var(--gold);color:#000;font-size:.65rem" onclick="openEditEvMod(\''+e.id+'\')">✏️ Edit</button><button class="reg-btn" style="background:var(--red);font-size:.65rem" onclick="deleteEv(\''+e.id+'\')">🗑 Delete</button></div>':''
+  return '<div class="ev-card"><div class="ev-thumb" style="background:'+e.bg+'">'+e.emoji+'<div class="ev-cat-badge c-'+e.cat+'">'+e.cat+'</div></div><div class="ev-body"><div class="ev-title">'+e.title+'</div><div class="ev-date">📅 '+e.date+'</div><div class="ev-venue">📍 '+e.venue+'</div>'+deadlineInfo+(hasLink&&!deadlinePassed?'<div style="font-size:.68rem;color:var(--green);margin-bottom:.5rem">🔗 External registration form</div>':'')+'<div class="ev-foot"><div class="ev-cnt">👥 <span id="ec-'+e.id+'">'+e.count+'</span> registered</div>'+regBtn+'</div>'+organiserBtns+'</div></div>';
 }
 
 async function loadHomeEvs(){
@@ -865,8 +874,22 @@ function filterEv(cat,el){document.querySelectorAll('#evPills .pill').forEach(p=
 async function regEv(id,btn){
   if(currentUser?.isGuest){showToast('Please sign in to register!');return;}
   btn.disabled=true;
-  try{const r=await api('POST','/events/'+id+'/register');btn.textContent=r.registered?'✔ Registered':'Register';btn.classList.toggle('done',r.registered);document.querySelectorAll('#ec-'+id).forEach(el=>el.textContent=r.count);showToast(r.registered?'Registered successfully!':'Unregistered.');}
-  catch(e){showToast(e.message);}
+  try{
+    const r=await api('POST','/events/'+id+'/register');
+    btn.textContent=r.registered?'✔ Registered':'Register';
+    btn.classList.toggle('done',r.registered);
+    document.querySelectorAll('#ec-'+id).forEach(el=>el.textContent=r.count);
+    showToast(r.registered?'Registered successfully!':'Unregistered.');
+  } catch(e){
+    if(e.message.includes('deadline')){
+      btn.textContent='🔒 Closed';
+      btn.style.background='#94a3b8';
+      btn.style.cursor='not-allowed';
+      showClosedPopup();
+    } else {
+      showToast(e.message);
+    }
+  }
   btn.disabled=false;
 }
 function openEvMod(){
@@ -876,11 +899,12 @@ function openEvMod(){
     '<div class="f-group"><label class="f-label">Date &amp; Time *</label><input class="f-inp" id="eD" placeholder="e.g. April 20 | 10:00AM"></div>'+
     '<div class="f-group"><label class="f-label">Category</label><select class="f-inp" id="eC"><option value="workshop">Workshop</option><option value="hackathon">Hackathon</option><option value="cultural">Cultural</option><option value="sports">Sports</option><option value="placement">Placement</option><option value="fdp">FDP</option><option value="conference">Conference</option></select></div>'+
     '<div class="f-group"><label class="f-label">Venue</label><input class="f-inp" id="eV" placeholder="e.g. CS Seminar Hall"></div>'+
-    '<div class="f-group"><label class="f-label">Registration Link <span style="color:var(--muted);font-weight:400">(Google Form / any link)</span></label><input class="f-inp" id="eL" type="url" placeholder="https://forms.gle/..."><div style="font-size:.72rem;color:var(--muted);margin-top:.35rem">💡 Leave blank for internal registration count.</div></div>',
-    async()=>{
+    '<div class="f-group"><label class="f-label">Registration Link <span style="color:var(--muted);font-weight:400">(Google Form / any link)</span></label><input class="f-inp" id="eL" type="url" placeholder="https://forms.gle/..."><div style="font-size:.72rem;color:var(--muted);margin-top:.35rem">💡 Leave blank for internal registration count.</div></div>'+
+'<div class="f-group"><label class="f-label">Registration Deadline <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="f-inp" id="eDL" type="datetime-local"><div style="font-size:.72rem;color:var(--muted);margin-top:.35rem">⏰ After this time, registration closes automatically.</div></div>',    async()=>{
       const t=document.getElementById('eT').value.trim(),d=document.getElementById('eD').value.trim(),l=document.getElementById('eL').value.trim();
       if(!t||!d){showToast('Title and date required!');return;}
-      try{await api('POST','/events',{title:t,category:document.getElementById('eC').value,date_str:d,venue:document.getElementById('eV').value.trim(),reg_link:l||null});closeModal();loadAllEvs();loadHomeEvs();showToast('Event posted!');}
+      const dl=document.getElementById('eDL').value;
+      try{await api('POST','/events',{title:t,category:document.getElementById('eC').value,date_str:d,venue:document.getElementById('eV').value.trim(),reg_link:l||null,deadline:dl||null});closeModal();loadAllEvs();loadHomeEvs();showToast('Event posted!');}
       catch(e){showToast(e.message);}
     }
   );
@@ -1041,7 +1065,50 @@ function renderNotices(){
   document.getElementById('notice-count-exam').textContent=EXAMS.length;
   document.getElementById('notice-count-result').textContent=RESULTS.length;
 }
+function showClosedPopup(){
+  openMod('🔒 Registration Closed',
+    '<div style="text-align:center;padding:1rem 0"><div style="font-size:3rem;margin-bottom:1rem">⏰</div><p style="font-size:.9rem;color:var(--muted);line-height:1.7">The registration deadline for this event has passed.<br>Please contact the organiser for more information.</p></div>',
+    ()=>closeModal()
+  );
+  document.getElementById('modOk').textContent='OK';
+  document.getElementById('modOk').onclick=closeModal;
+  document.querySelector('.btn-cancel').style.display='none';
+}
 
+async function openEditEvMod(id){
+  if(!currentUser?.isOrganiser){showToast('Only organisers can edit events!');return;}
+  const evs=await api('GET','/events');
+  const e=evs.find(x=>x.id===id);
+  if(!e){showToast('Event not found!');return;}
+  const dlVal=e.deadline?new Date(e.deadline).toISOString().slice(0,16):'';
+  openMod('✏️ Edit Event',
+    '<div class="f-group"><label class="f-label">Event Title *</label><input class="f-inp" id="eeT" value="'+e.title+'"></div>'+
+    '<div class="f-group"><label class="f-label">Date &amp; Time *</label><input class="f-inp" id="eeD" value="'+e.date+'"></div>'+
+    '<div class="f-group"><label class="f-label">Category</label><select class="f-inp" id="eeC"><option value="workshop"'+(e.cat==='workshop'?' selected':'')+'>Workshop</option><option value="hackathon"'+(e.cat==='hackathon'?' selected':'')+'>Hackathon</option><option value="cultural"'+(e.cat==='cultural'?' selected':'')+'>Cultural</option><option value="sports"'+(e.cat==='sports'?' selected':'')+'>Sports</option><option value="placement"'+(e.cat==='placement'?' selected':'')+'>Placement</option><option value="fdp"'+(e.cat==='fdp'?' selected':'')+'>FDP</option><option value="conference"'+(e.cat==='conference'?' selected':'')+'>Conference</option></select></div>'+
+    '<div class="f-group"><label class="f-label">Venue</label><input class="f-inp" id="eeV" value="'+e.venue+'"></div>'+
+    '<div class="f-group"><label class="f-label">Registration Link</label><input class="f-inp" id="eeL" type="url" value="'+(e.reg_link||'')+'"></div>'+
+    '<div class="f-group"><label class="f-label">Registration Deadline</label><input class="f-inp" id="eeDL" type="datetime-local" value="'+dlVal+'"></div>',
+    async()=>{
+      const t=document.getElementById('eeT').value.trim(),d=document.getElementById('eeD').value.trim();
+      if(!t||!d){showToast('Title and date required!');return;}
+      const l=document.getElementById('eeL').value.trim();
+      const dl=document.getElementById('eeDL').value;
+      try{
+        await api('PUT','/events/'+id,{title:t,category:document.getElementById('eeC').value,date_str:d,venue:document.getElementById('eeV').value.trim(),reg_link:l||null,deadline:dl||null});
+        closeModal();loadAllEvs();loadHomeEvs();showToast('Event updated!');
+      }catch(err){showToast(err.message);}
+    }
+  );
+}
+
+async function deleteEv(id){
+  if(!currentUser?.isOrganiser){showToast('Only organisers can delete events!');return;}
+  if(!confirm('Are you sure you want to delete this event?')) return;
+  try{
+    await api('DELETE','/events/'+id);
+    loadAllEvs();loadHomeEvs();showToast('Event deleted!');
+  }catch(e){showToast(e.message);}
+}
 /* ════ CHATBOT ════ */
 let chatOpen=false;
 const BOT_KB={

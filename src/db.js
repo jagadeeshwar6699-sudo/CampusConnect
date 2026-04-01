@@ -47,12 +47,12 @@ async function seed() {
   ]);
 
   await db.collection('events').insertMany([
-    { id:'e1', author_id:'seed_5', title:'Hackathon 4.0 – 2025',              category:'hackathon', emoji:'💻', date_str:'March 22–23 | 9:00AM', venue:'RVRJCCE Main Campus',        bg_color:'#001a4d', reg_link:null, created_at:ago(10) },
-    { id:'e2', author_id:'seed_2', title:'Rujangna Annual Cultural Fest 2025', category:'cultural',  emoji:'🎭', date_str:'April 5–7 | All Day',   venue:'RVRJCCE College Ground',     bg_color:'#2d0050', reg_link:null, created_at:ago(9)  },
-    { id:'e3', author_id:'seed_3', title:'Data Science & ML Workshop',         category:'workshop',  emoji:'📊', date_str:'March 28 | 9:00AM',    venue:'CS Seminar Hall',             bg_color:'#003300', reg_link:null, created_at:ago(8)  },
-    { id:'e4', author_id:'seed_5', title:'TCS Campus Placement Drive',         category:'placement', emoji:'🏢', date_str:'April 2 | 8:00AM',     venue:'Placement Cell, Admin Block', bg_color:'#2d1a00', reg_link:null, created_at:ago(7)  },
-    { id:'e5', author_id:'seed_4', title:'Inter-Department Cricket Tournament',category:'sports',    emoji:'🏏', date_str:'April 12 | 8:00AM',    venue:'RVRJCCE Sports Ground',       bg_color:'#1a1a00', reg_link:null, created_at:ago(6)  },
-    { id:'e6', author_id:'seed_1', title:'FDP on AI & Deep Learning',          category:'fdp',       emoji:'🎓', date_str:'March 25–29 | 10:00AM',venue:'ECE Seminar Hall',            bg_color:'#00001a', reg_link:null, created_at:ago(5)  }
+    { id:'e1', author_id:'seed_5', title:'Hackathon 4.0 – 2025',              category:'hackathon', emoji:'💻', date_str:'March 22–23 | 9:00AM', venue:'RVRJCCE Main Campus',        bg_color:'#001a4d', reg_link:null, deadline:null, created_at:ago(10) },
+    { id:'e2', author_id:'seed_2', title:'Rujangna Annual Cultural Fest 2025', category:'cultural',  emoji:'🎭', date_str:'April 5–7 | All Day',   venue:'RVRJCCE College Ground',     bg_color:'#2d0050', reg_link:null, deadline:null, created_at:ago(9)  },
+    { id:'e3', author_id:'seed_3', title:'Data Science & ML Workshop',         category:'workshop',  emoji:'📊', date_str:'March 28 | 9:00AM',    venue:'CS Seminar Hall',             bg_color:'#003300', reg_link:null, deadline:null, created_at:ago(8)  },
+    { id:'e4', author_id:'seed_5', title:'TCS Campus Placement Drive',         category:'placement', emoji:'🏢', date_str:'April 2 | 8:00AM',     venue:'Placement Cell, Admin Block', bg_color:'#2d1a00', reg_link:null, deadline:null, created_at:ago(7)  },
+    { id:'e5', author_id:'seed_4', title:'Inter-Department Cricket Tournament',category:'sports',    emoji:'🏏', date_str:'April 12 | 8:00AM',    venue:'RVRJCCE Sports Ground',       bg_color:'#1a1a00', reg_link:null, deadline:null, created_at:ago(6)  },
+    { id:'e6', author_id:'seed_1', title:'FDP on AI & Deep Learning',          category:'fdp',       emoji:'🎓', date_str:'March 25–29 | 10:00AM',venue:'ECE Seminar Hall',            bg_color:'#00001a', reg_link:null, deadline:null, created_at:ago(5)  }
   ]);
 
   await db.collection('achievements').insertMany([
@@ -98,6 +98,8 @@ const db_api = {
   async getEvents(cat)        { const d = await connect(); const q = (cat && cat !== 'all') ? { category: cat } : {}; return d.collection('events').find(q).sort({ created_at: -1 }).toArray(); },
   async getEventById(id)      { const d = await connect(); return d.collection('events').findOne({ id }); },
   async addEvent(e)           { const d = await connect(); await d.collection('events').insertOne(e); },
+  async updateEvent(id, fields) { const d = await connect(); await d.collection('events').updateOne({ id }, { $set: fields }); },
+  async deleteEvent(id)       { const d = await connect(); await d.collection('events').deleteOne({ id }); },
   async getRegs(eid)          { const d = await connect(); return (await d.collection('event_regs').find({ event_id: eid }).toArray()).map(r => r.user_id); },
   async toggleReg(eid, uid)   {
     const d = await connect();

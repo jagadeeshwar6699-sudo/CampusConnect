@@ -3,6 +3,7 @@ const bcrypt  = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./db');
 const { authMiddleware, signToken } = require('./auth');
+const { MongoClient } = require('mongodb');
 
 const router = express.Router();
 
@@ -175,6 +176,7 @@ router.get('/events', async (req, res) => {
         id:e.id, cat:e.category, emoji:e.emoji, bg:e.bg_color,
         title:e.title, date:e.date_str, venue:e.venue,
         reg_link:e.reg_link||null,
+        deadline:e.deadline||null,
         count:regs.length, registered:regs.includes(uid), uid:e.author_id
       };
     }));
@@ -184,21 +186,53 @@ router.get('/events', async (req, res) => {
 
 router.post('/events', authMiddleware, async (req, res) => {
   try {
-    const { title, category, date_str, venue, reg_link } = req.body;
+    const { title, category, date_str, venue, reg_link, deadline } = req.body;
     if (!title?.trim()||!date_str?.trim()) return res.status(400).json({ error:'Title and date required.' });
     const EMOJIS = { workshop:'📊', hackathon:'💻', cultural:'🎭', sports:'🏅', placement:'🏢', fdp:'🎓', conference:'🔬' };
     const BGS    = { workshop:'#003300', hackathon:'#001a4d', cultural:'#2d0050', sports:'#1a1a00', placement:'#2d1a00', fdp:'#00001a', conference:'#1a0000' };
     const cat    = category||'workshop';
     let link = reg_link?.trim() || null;
     if (link && !link.startsWith('http')) link = 'https://' + link;
-    const ev = { id:uuidv4(), author_id:req.user.id, title:title.trim(), category:cat, emoji:EMOJIS[cat]||'📅', date_str:date_str.trim(), venue:venue||'RVRJCCE Campus', bg_color:BGS[cat]||'#001144', reg_link:link, created_at:new Date().toISOString() };
+    const ev = { id:uuidv4(), author_id:req.user.id, title:title.trim(), category:cat, emoji:EMOJIS[cat]||'📅', date_str:date_str.trim(), venue:venue||'RVRJCCE Campus', bg_color:BGS[cat]||'#001144', reg_link:link, deadline:deadline||null, created_at:new Date().toISOString() };
     await db.addEvent(ev);
-    res.json({ id:ev.id, cat, emoji:ev.emoji, bg:ev.bg_color, title:ev.title, date:ev.date_str, venue:ev.venue, reg_link:link, count:0, registered:false, uid:req.user.id });
+    res.json({ id:ev.id, cat, emoji:ev.emoji, bg:ev.bg_color, title:ev.title, date:ev.date_str, venue:ev.venue, reg_link:link, deadline:deadline||null, count:0, registered:false, uid:req.user.id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/events/:id', authMiddleware, async (req, res) => {
+  try {
+    const { title, category, date_str, venue, reg_link, deadline } = req.body;
+    if (!title?.trim()||!date_str?.trim()) return res.status(400).json({ error:'Title and date required.' });
+    const EMOJIS = { workshop:'📊', hackathon:'💻', cultural:'🎭', sports:'🏅', placement:'🏢', fdp:'🎓', conference:'🔬' };
+    const BGS    = { workshop:'#003300', hackathon:'#001a4d', cultural:'#2d0050', sports:'#1a1a00', placement:'#2d1a00', fdp:'#00001a', conference:'#1a0000' };
+    const cat = category||'workshop';
+    let link = reg_link?.trim() || null;
+    if (link && !link.startsWith('http')) link = 'https://' + link;
+    await db.updateEvent(req.params.id, {
+      title:title.trim(), category:cat, emoji:EMOJIS[cat]||'📅',
+      date_str:date_str.trim(), venue:venue||'RVRJCCE Campus',
+      bg_color:BGS[cat]||'#001144', reg_link:link, deadline:deadline||null
+    });
+    res.json({ ok:true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/events/:id', authMiddleware, async (req, res) => {
+  try {
+    const ev = await db.getEventById(req.params.id);
+    if (!ev) return res.status(404).json({ error:'Not found' });
+    await db.deleteEvent(req.params.id);
+    res.json({ ok:true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/events/:id/register', authMiddleware, async (req, res) => {
   try {
+    const ev = await db.getEventById(req.params.id);
+    if (!ev) return res.status(404).json({ error:'Event not found' });
+    if (ev.deadline && new Date() > new Date(ev.deadline)) {
+      return res.status(403).json({ error:'Registration deadline has passed for this event.' });
+    }
     const registered = await db.toggleReg(req.params.id, req.user.id);
     const count      = (await db.getRegs(req.params.id)).length;
     res.json({ registered, count });
