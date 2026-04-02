@@ -925,9 +925,9 @@ async function loadDisc(cat){
       '<div class="post-card"><div class="post-head"><div class="post-av" style="background:'+p.col+'">'+p.ini+'</div><div><div class="post-name">'+p.author+'</div><div class="post-when">'+p.time+' · <span class="badge bd">'+p.cat+'</span></div></div></div>'+
       '<div class="post-body">'+p.text+'</div>'+
       '<div class="post-actions"><button class="post-btn '+(p.likes.includes(currentUser?.id)?'liked':'')+'" onclick="likePost(\''+p.id+'\',this)">♥ <span id="lc-'+p.id+'">'+p.likes.length+'</span></button>'+
-      '<button class="post-btn">💬 '+p.comments+' replies</button>'+
+      '<button class="post-btn" onclick="toggleReplies(\''+p.id+'\')">💬 <span id="rc-'+p.id+'">'+p.comments+'</span> replies</button>'+
       (p.isOwn?'<button class="post-btn" style="margin-left:auto;color:var(--red)" onclick="deletePost(\''+p.id+'\')">🗑</button>':'')+
-      '</div></div>'
+      '</div><div id="replies-'+p.id+'" style="display:none;margin-top:.75rem;border-top:1px solid var(--border);padding-top:.75rem"></div></div>'
     ).join('');
   }catch(e){list.innerHTML='<div style="color:var(--red);padding:2rem">'+e.message+'</div>';}
 }
@@ -976,8 +976,10 @@ function renderQA(){
     '<div class="qa-tags">'+q.tags.map(t=>'<span class="qtag">#'+t+'</span>').join('')+'</div>'+
     '<div class="qa-meta">'+(q.solved?'<span class="ok-badge">✔ Answered</span>':'<span class="open-badge">⏳ Open</span>')+
     '<span class="qa-author-chip">👤 '+q.by+'</span><span>🕐 '+q.t+'</span>'+
+    '<span class="qa-author-chip">👤 '+q.by+'</span><span>🕐 '+q.t+'</span>'+
+    '<button style="background:none;border:none;font-size:.72rem;color:var(--navy);cursor:pointer" onclick="toggleAnswers(\''+q.id+'\')">💬 View Answers</button>'+
     (q.isOwn?'<button style="background:none;border:none;font-size:.72rem;color:var(--red);cursor:pointer;margin-left:auto" onclick="deleteQ(\''+q.id+'\')">🗑 Delete</button>':'')+
-    '</div></div></div>'
+    '</div></div><div id="answers-'+q.id+'" style="display:none;margin-top:.75rem;border-top:1px solid var(--border);padding-top:.75rem;padding-left:3.5rem"></div></div>'
   ).join('');
 }
 function filterQA(tag,el){document.querySelectorAll('.page#qa .pill').forEach(p=>p.classList.remove('on'));el.classList.add('on');qaCatF=tag;renderQA();}
@@ -1039,6 +1041,120 @@ function openAchMod(){
 }
 
 /* ════ NOTICES ════ */
+/* ════ REPLIES ════ */
+async function toggleReplies(pid){
+  const box=document.getElementById('replies-'+pid);
+  if(box.style.display==='none'){
+    box.style.display='block';
+    await loadReplies(pid);
+  } else {
+    box.style.display='none';
+  }
+}
+
+async function loadReplies(pid){
+  const box=document.getElementById('replies-'+pid);
+  box.innerHTML='<div style="font-size:.75rem;color:var(--muted);padding:.5rem">Loading…</div>';
+  try{
+    const replies=await api('GET','/posts/'+pid+'/replies');
+    const replyHtml=replies.map(r=>
+      '<div style="display:flex;gap:.5rem;margin-bottom:.6rem;align-items:flex-start">'+
+      '<div style="width:28px;height:28px;border-radius:50%;background:'+r.col+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0">'+r.ini+'</div>'+
+      '<div style="flex:1;background:var(--bg);border-radius:8px;padding:.5rem .75rem">'+
+      '<div style="font-size:.75rem;font-weight:600">'+r.author+' <span style="color:var(--muted);font-weight:400">· '+r.time+'</span>'+
+      (r.isOwn?'<button onclick="deleteReply(\''+pid+'\',\''+r.id+'\')" style="float:right;background:none;border:none;color:var(--red);font-size:.68rem;cursor:pointer">🗑</button>':'')+
+      '</div><div style="font-size:.82rem;margin-top:.2rem">'+r.text+'</div></div></div>'
+    ).join('');
+    const inputHtml=currentUser?.isGuest?'<div style="font-size:.75rem;color:var(--muted)">Sign in to reply</div>':
+      '<div style="display:flex;gap:.5rem;margin-top:.5rem">'+
+      '<input id="ri-'+pid+'" class="f-inp" style="font-size:.8rem;padding:.4rem .7rem" placeholder="Write a reply…">'+
+      '<button onclick="postReply(\''+pid+'\')" class="btn-sm btn-navy" style="font-size:.75rem;white-space:nowrap">Reply</button></div>';
+    box.innerHTML=replyHtml+inputHtml;
+    document.getElementById('rc-'+pid).textContent=replies.length;
+  }catch(e){box.innerHTML='<div style="color:var(--red);font-size:.8rem">'+e.message+'</div>';}
+}
+
+async function postReply(pid){
+  const inp=document.getElementById('ri-'+pid);
+  const text=inp?.value.trim();
+  if(!text){showToast('Write something first!');return;}
+  try{
+    await api('POST','/posts/'+pid+'/replies',{text});
+    inp.value='';
+    await loadReplies(pid);
+    showToast('Reply posted!');
+  }catch(e){showToast(e.message);}
+}
+
+async function deleteReply(pid,rid){
+  try{
+    await api('DELETE','/posts/'+pid+'/replies/'+rid);
+    await loadReplies(pid);
+    showToast('Reply deleted.');
+  }catch(e){showToast(e.message);}
+}
+
+/* ════ ANSWERS ════ */
+async function toggleAnswers(qid){
+  const box=document.getElementById('answers-'+qid);
+  if(box.style.display==='none'){
+    box.style.display='block';
+    await loadAnswers(qid);
+  } else {
+    box.style.display='none';
+  }
+}
+
+async function loadAnswers(qid){
+  const box=document.getElementById('answers-'+qid);
+  box.innerHTML='<div style="font-size:.75rem;color:var(--muted);padding:.5rem">Loading…</div>';
+  try{
+    const answers=await api('GET','/questions/'+qid+'/answers');
+    const ansHtml=answers.map(a=>
+      '<div style="display:flex;gap:.5rem;margin-bottom:.75rem;align-items:flex-start">'+
+      '<div style="width:28px;height:28px;border-radius:50%;background:'+a.col+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;flex-shrink:0">'+a.ini+'</div>'+
+      '<div style="flex:1;background:var(--bg);border-radius:8px;padding:.6rem .85rem;border-left:3px solid var(--navy)">'+
+      '<div style="font-size:.75rem;font-weight:600">'+a.author+' <span style="color:var(--muted);font-weight:400">· '+a.time+'</span>'+
+      (a.isOwn?'<button onclick="deleteAnswer(\''+qid+'\',\''+a.id+'\')" style="float:right;background:none;border:none;color:var(--red);font-size:.68rem;cursor:pointer">🗑</button>':'')+
+      '</div><div style="font-size:.84rem;margin-top:.3rem;line-height:1.6">'+a.text+'</div></div></div>'
+    ).join('');
+    const inputHtml=currentUser?.isGuest?'<div style="font-size:.75rem;color:var(--muted)">Sign in to answer</div>':
+      '<div style="margin-top:.5rem">'+
+      '<textarea id="ai-'+qid+'" class="f-inp" style="font-size:.8rem;min-height:70px;resize:none" placeholder="Write your answer…"></textarea>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:.4rem">'+
+      '<button onclick="markSolved(\''+qid+'\')" style="background:none;border:1px solid var(--green);color:var(--green);border-radius:6px;padding:.3rem .7rem;font-size:.72rem;cursor:pointer">✔ Mark Solved</button>'+
+      '<button onclick="postAnswer(\''+qid+'\')" class="btn-sm btn-navy" style="font-size:.75rem">Post Answer</button></div></div>';
+    box.innerHTML=(answers.length?ansHtml:'<div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">No answers yet. Be the first!</div>')+inputHtml;
+  }catch(e){box.innerHTML='<div style="color:var(--red);font-size:.8rem">'+e.message+'</div>';}
+}
+
+async function postAnswer(qid){
+  const inp=document.getElementById('ai-'+qid);
+  const text=inp?.value.trim();
+  if(!text){showToast('Write an answer first!');return;}
+  try{
+    await api('POST','/questions/'+qid+'/answers',{text});
+    inp.value='';
+    await loadAnswers(qid);
+    showToast('Answer posted!');
+  }catch(e){showToast(e.message);}
+}
+
+async function deleteAnswer(qid,aid){
+  try{
+    await api('DELETE','/questions/'+qid+'/answers/'+aid);
+    await loadAnswers(qid);
+    showToast('Answer deleted.');
+  }catch(e){showToast(e.message);}
+}
+
+async function markSolved(qid){
+  try{
+    await api('PATCH','/questions/'+qid+'/solve');
+    await loadQA();
+    showToast('Question marked as solved! ✔');
+  }catch(e){showToast(e.message);}
+}
 const NOTICES=[
   {text:'Notice: Second Saturday Working Day & Holidays from 19.03.26 to 22.03.26',date:'Mar 14',isNew:true,link:'https://rvrjcce.ac.in/xnotices.php'},
   {text:'Notice: Payment of Tuition Fee by SC Students Sanctioned by Central Govt.',date:'Mar 12',isNew:true,link:'https://rvrjcce.ac.in/xnotices.php'},

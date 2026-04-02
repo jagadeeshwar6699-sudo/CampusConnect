@@ -117,7 +117,43 @@ router.delete('/posts/:id', authMiddleware, async (req, res) => {
     res.json({ ok:true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+// ─── REPLIES ──────────────────────────────────────────────────────────────────
 
+router.get('/posts/:id/replies', async (req, res) => {
+  try {
+    const replies = await db.getReplies(req.params.id);
+    const result = await Promise.all(replies.map(async r => {
+      const author = await db.getUserById(r.author_id);
+      return {
+        id:r.id, text:r.text,
+        author:author?.name||'Unknown',
+        ini:ini(author?.name||'?'),
+        col:author?.color||'#64748b',
+        time:timeAgo(r.created_at),
+        isOwn:r.author_id===uidFromReq(req)
+      };
+    }));
+    res.json(result);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/posts/:id/replies', authMiddleware, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ error:'Reply text required.' });
+    const reply = { id:uuidv4(), post_id:req.params.id, author_id:req.user.id, text:text.trim(), created_at:new Date().toISOString() };
+    await db.addReply(reply);
+    const user = await db.getUserById(req.user.id);
+    res.json({ id:reply.id, text:reply.text, author:user.name, ini:ini(user.name), col:user.color, time:'just now', isOwn:true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/posts/:id/replies/:rid', authMiddleware, async (req, res) => {
+  try {
+    await db.deleteReply(req.params.rid);
+    res.json({ ok:true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 // ─── QUESTIONS ────────────────────────────────────────────────────────────────
 
 router.get('/questions', async (req, res) => {
@@ -160,6 +196,50 @@ router.delete('/questions/:id', authMiddleware, async (req, res) => {
     if (!q)                           return res.status(404).json({ error:'Not found' });
     if (q.author_id !== req.user.id)  return res.status(403).json({ error:'Forbidden' });
     await db.deleteQuestion(req.params.id);
+    res.json({ ok:true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+// ─── ANSWERS ──────────────────────────────────────────────────────────────────
+
+router.get('/questions/:id/answers', async (req, res) => {
+  try {
+    const answers = await db.getAnswers(req.params.id);
+    const result = await Promise.all(answers.map(async a => {
+      const author = await db.getUserById(a.author_id);
+      return {
+        id:a.id, text:a.text,
+        author:author?.name||'Unknown',
+        ini:ini(author?.name||'?'),
+        col:author?.color||'#64748b',
+        time:timeAgo(a.created_at),
+        isOwn:a.author_id===uidFromReq(req)
+      };
+    }));
+    res.json(result);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/questions/:id/answers', authMiddleware, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ error:'Answer text required.' });
+    const answer = { id:uuidv4(), question_id:req.params.id, author_id:req.user.id, text:text.trim(), created_at:new Date().toISOString() };
+    await db.addAnswer(answer);
+    const user = await db.getUserById(req.user.id);
+    res.json({ id:answer.id, text:answer.text, author:user.name, ini:ini(user.name), col:user.color, time:'just now', isOwn:true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/questions/:id/answers/:aid', authMiddleware, async (req, res) => {
+  try {
+    await db.deleteAnswer(req.params.aid);
+    res.json({ ok:true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/questions/:id/solve', authMiddleware, async (req, res) => {
+  try {
+    await db.markSolved(req.params.id);
     res.json({ ok:true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

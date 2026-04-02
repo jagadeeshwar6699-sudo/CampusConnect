@@ -81,11 +81,17 @@ const db_api = {
     if (exists) { await d.collection('post_likes').deleteOne({ post_id: pid, user_id: uid }); return false; }
     await d.collection('post_likes').insertOne({ post_id: pid, user_id: uid }); return true;
   },
-
+  async getReplies(pid)       { const d = await connect(); return d.collection('replies').find({ post_id: pid }).sort({ created_at: 1 }).toArray(); },
+  async addReply(r)           { const d = await connect(); await d.collection('replies').insertOne(r); },
+  async deleteReply(id)       { const d = await connect(); await d.collection('replies').deleteOne({ id }); },
   async getQuestions()        { const d = await connect(); return d.collection('questions').find().sort({ created_at: -1 }).toArray(); },
   async getQuestionById(id)   { const d = await connect(); return d.collection('questions').findOne({ id }); },
   async addQuestion(q)        { const d = await connect(); await d.collection('questions').insertOne(q); },
   async deleteQuestion(id)    { const d = await connect(); await d.collection('questions').deleteOne({ id }); },
+  async getAnswers(qid)       { const d = await connect(); return d.collection('answers').find({ question_id: qid }).sort({ created_at: 1 }).toArray(); },
+  async addAnswer(a)          { const d = await connect(); await d.collection('answers').insertOne(a); },
+  async deleteAnswer(id)      { const d = await connect(); await d.collection('answers').deleteOne({ id }); },
+  async markSolved(qid)       { const d = await connect(); await d.collection('questions').updateOne({ id: qid }, { $set: { solved: true } }); },
   async voteQuestion(id, dir) {
     const d = await connect();
     const q = await d.collection('questions').findOne({ id });
